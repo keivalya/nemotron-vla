@@ -12,31 +12,47 @@ def _setup_rendering():
     Auto-detect the best MuJoCo rendering backend.
     - EGL:    hardware-accelerated, works on NVIDIA GPUs (Colab, clusters)
     - OSMesa: software fallback, needs libOSMesa.so
+
+    Handles Colab's quirk where only versioned .so.1 files exist
+    (not the bare .so symlinks that ctypes defaults to).
     """
     # If user already set it, respect their choice
     if "MUJOCO_GL" in os.environ:
         return
 
-    # Try EGL first (native on NVIDIA GPUs, no PyOpenGL needed)
-    try:
-        import ctypes
-        ctypes.cdll.LoadLibrary("libEGL.so")
+    import ctypes, ctypes.util
+
+    def _try_load(names):
+        for name in names:
+            try:
+                ctypes.cdll.LoadLibrary(name)
+                return True
+            except OSError:
+                continue
+        # Also try ctypes.util.find_library
+        for name in names:
+            bare = name.replace("lib", "", 1).split(".so")[0]
+            found = ctypes.util.find_library(bare)
+            if found:
+                try:
+                    ctypes.cdll.LoadLibrary(found)
+                    return True
+                except OSError:
+                    continue
+        return False
+
+    # Try EGL first (preferred on NVIDIA GPUs)
+    if _try_load(["libEGL.so", "libEGL.so.1", "libEGL.so.1.1.0"]):
         os.environ["MUJOCO_GL"] = "egl"
         return
-    except OSError:
-        pass
 
     # Try OSMesa as fallback
-    try:
-        import ctypes
-        ctypes.cdll.LoadLibrary("libOSMesa.so")
+    if _try_load(["libOSMesa.so", "libOSMesa.so.8", "libOSMesa.so.6"]):
         os.environ["MUJOCO_GL"] = "osmesa"
         os.environ["PYOPENGL_PLATFORM"] = "osmesa"
         return
-    except OSError:
-        pass
 
-    # Last resort: let MuJoCo figure it out (may need a display)
+    # Default to EGL and hope MuJoCo resolves it
     os.environ["MUJOCO_GL"] = "egl"
 
 _setup_rendering()
