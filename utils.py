@@ -212,6 +212,10 @@ def evaluate_nemotron_vla(
         results: dict with rewards and success rates
     """
     import torchvision.transforms as T
+
+    # Ensure rendering backend is configured before env import
+    from env import _setup_rendering
+    _setup_rendering()
     from env import MetaWorldMT1Wrapper
 
     # RADIO preprocessing

@@ -5,13 +5,12 @@ MetaWorld MT1 environment wrapper for robot manipulation tasks.
 Compatible with Meta-World's gymnasium interface.
 """
 
-import gymnasium as gym
-import numpy as np
+import os
+# CRITICAL: Set rendering backend BEFORE importing mujoco/metaworld
+os.environ["MUJOCO_GL"] = "osmesa"
+os.environ["PYOPENGL_PLATFORM"] = "osmesa"
 
-try:
-    import metaworld
-except ImportError:
-    print("⚠️  metaworld not installed. Run: pip install metaworld")
+import numpy as np
 
 
 class MetaWorldMT1Wrapper:
@@ -28,6 +27,9 @@ class MetaWorldMT1Wrapper:
         render_mode="rgb_array",
         camera_name="corner2",
     ):
+        import gymnasium as gym
+        import metaworld  # noqa: F401 — registers Meta-World envs
+
         self.env = gym.make(
             "Meta-World/MT1",
             env_name=env_name,
@@ -98,6 +100,8 @@ def collect_demonstrations(
         dict with keys: images, states, actions, instruction
     """
     from metaworld.policies import ENV_POLICY_MAP
+    import gymnasium as gym
+    import metaworld  # noqa: F401
 
     env = gym.make(
         "Meta-World/MT1",
