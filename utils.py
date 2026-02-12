@@ -218,16 +218,16 @@ def evaluate_nemotron_vla(
     _setup_rendering()
     from env import MetaWorldMT1Wrapper
 
-    # RADIO preprocessing
+    # RADIO preprocessing — no manual normalization, model has its own conditioner
     radio_transform = T.Compose([
         T.ToPILImage(),
         T.Resize(224, interpolation=T.InterpolationMode.BICUBIC),
         T.CenterCrop(224),
         T.ToTensor(),
-        T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
 
     radio_dtype = next(radio_model.parameters()).dtype
+    conditioner = getattr(radio_model, "input_conditioner", None)
 
     # Prepare text embedding tensor (reused every step)
     txt_emb = torch.from_numpy(text_embedding).float().unsqueeze(0).to(device)
@@ -263,6 +263,8 @@ def evaluate_nemotron_vla(
         for step in range(max_steps):
             # Extract RADIO features for current image
             img_t = radio_transform(img).unsqueeze(0).to(device=device, dtype=radio_dtype)
+            if conditioner is not None:
+                img_t = conditioner(img_t)
             with torch.no_grad():
                 summary, _ = radio_model(img_t)
                 vis_emb = summary.float()  # (1, radio_dim)

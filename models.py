@@ -23,24 +23,26 @@ import torch.nn.functional as F
 
 def load_radio_model(device="cuda", dtype=torch.float16):
     """
-    Load NVIDIA RADIO vision foundation model from HuggingFace.
+    Load NVIDIA RADIO vision foundation model via torch.hub.
 
     RADIO (AM-RADIO) distills knowledge from multiple teacher models
     (CLIP, DINOv2, SAM) into a single efficient ViT backbone.
-    It produces both a summary embedding and spatial features.
 
     Returns:
         model: RADIO model (frozen, eval mode)
         radio_dim: int, dimension of the summary embedding
     """
-    from transformers import AutoModel
-
     print("📸 Loading NVIDIA RADIO vision encoder...")
-    model = AutoModel.from_pretrained(
-        "nvidia/RADIO",
-        trust_remote_code=True,
-        torch_dtype=dtype,
-    ).to(device).eval()
+
+    # torch.hub is the officially supported way to load RADIO
+    model = torch.hub.load(
+        "NVlabs/RADIO",
+        "radio_model",
+        version="radio_v2.5-b",   # ViT-B/16 variant, ~86M params
+        progress=True,
+        skip_validation=True,
+    )
+    model = model.to(device=device, dtype=dtype).eval()
 
     # Freeze all parameters
     for p in model.parameters():
@@ -61,7 +63,7 @@ def extract_radio_features(radio_model, images_np, device="cuda", batch_size=64)
     Extract RADIO summary embeddings for a batch of images.
 
     Args:
-        radio_model: Loaded RADIO model
+        radio_model: Loaded RADIO model (from torch.hub)
         images_np: numpy array (N, H, W, 3) uint8
         device: torch device
         batch_size: batch size for processing
@@ -71,14 +73,17 @@ def extract_radio_features(radio_model, images_np, device="cuda", batch_size=64)
     """
     import torchvision.transforms as T
 
-    # RADIO preprocessing: resize to 224x224, ImageNet normalization
+    # RADIO's preferred resolution and normalization
+    # The torch.hub model includes an input_conditioner for normalization
     transform = T.Compose([
         T.ToPILImage(),
         T.Resize(224, interpolation=T.InterpolationMode.BICUBIC),
         T.CenterCrop(224),
-        T.ToTensor(),
-        T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        T.ToTensor(),  # [0, 1]
     ])
+
+    # Check if model has input conditioner (torch.hub RADIO models do)
+    conditioner = getattr(radio_model, "input_conditioner", None)
 
     N = images_np.shape[0]
     all_features = []
@@ -94,6 +99,10 @@ def extract_radio_features(radio_model, images_np, device="cuda", batch_size=64)
             batch_imgs.append(img_t)
 
         batch_tensor = torch.stack(batch_imgs).to(device=device, dtype=dtype)
+
+        # Apply RADIO's built-in normalization if available
+        if conditioner is not None:
+            batch_tensor = conditioner(batch_tensor)
 
         with torch.no_grad():
             summary, _ = radio_model(batch_tensor)
