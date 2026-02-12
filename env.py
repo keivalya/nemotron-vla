@@ -6,9 +6,40 @@ Compatible with Meta-World's gymnasium interface.
 """
 
 import os
-# CRITICAL: Set rendering backend BEFORE importing mujoco/metaworld
-os.environ["MUJOCO_GL"] = "osmesa"
-os.environ["PYOPENGL_PLATFORM"] = "osmesa"
+
+def _setup_rendering():
+    """
+    Auto-detect the best MuJoCo rendering backend.
+    - EGL:    hardware-accelerated, works on NVIDIA GPUs (Colab, clusters)
+    - OSMesa: software fallback, needs libOSMesa.so
+    """
+    # If user already set it, respect their choice
+    if "MUJOCO_GL" in os.environ:
+        return
+
+    # Try EGL first (native on NVIDIA GPUs, no PyOpenGL needed)
+    try:
+        import ctypes
+        ctypes.cdll.LoadLibrary("libEGL.so")
+        os.environ["MUJOCO_GL"] = "egl"
+        return
+    except OSError:
+        pass
+
+    # Try OSMesa as fallback
+    try:
+        import ctypes
+        ctypes.cdll.LoadLibrary("libOSMesa.so")
+        os.environ["MUJOCO_GL"] = "osmesa"
+        os.environ["PYOPENGL_PLATFORM"] = "osmesa"
+        return
+    except OSError:
+        pass
+
+    # Last resort: let MuJoCo figure it out (may need a display)
+    os.environ["MUJOCO_GL"] = "egl"
+
+_setup_rendering()
 
 import numpy as np
 
