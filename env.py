@@ -113,6 +113,7 @@ class MetaWorldMT1Wrapper:
     def _get_image(self):
         """Render and return RGB image."""
         img = self.env.render()
+        img = np.flipud(img).copy()
         return img.astype(np.uint8)
 
     def reset(self, seed=None):
@@ -171,6 +172,7 @@ def collect_demonstrations(
         while not done and steps < max_steps:
             action = policy.get_action(obs)
             img = env.render()
+            img = np.flipud(img).copy()
 
             all_images.append(img.astype(np.uint8).copy())
             all_states.append(np.asarray(obs, dtype=np.float32).ravel().copy())

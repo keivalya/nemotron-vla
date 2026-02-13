@@ -42,7 +42,7 @@ def load_radio_model(device="cuda", dtype=torch.float16):
         progress=True,
         skip_validation=True,
     )
-    model = model.to(device=device, dtype=dtype).eval()
+    model = model.to(device=device).float().eval()
 
     # Freeze all parameters
     for p in model.parameters():
@@ -50,7 +50,7 @@ def load_radio_model(device="cuda", dtype=torch.float16):
 
     # Detect output dimension with a dummy forward pass
     with torch.no_grad():
-        dummy = torch.randn(1, 3, 224, 224, device=device, dtype=dtype)
+        dummy = torch.randn(1, 3, 224, 224, device=device)
         summary, spatial = model(dummy)
         radio_dim = summary.shape[-1]
 
@@ -172,11 +172,17 @@ def extract_nemotron_embedding(model, tokenizer, text, device="cuda"):
     Returns:
         embedding: numpy array (hidden_dim,) float32
     """
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
     inputs = tokenizer(text, return_tensors="pt", padding=True, truncation=True)
-    input_ids = inputs["input_ids"].to(device)
+    
+    # Send inputs to wherever the model's embedding layer lives
+    input_device = next(model.parameters()).device
+    input_ids = inputs["input_ids"].to(input_device)
+    
     attention_mask = inputs.get("attention_mask", None)
     if attention_mask is not None:
-        attention_mask = attention_mask.to(device)
+        attention_mask = attention_mask.to(input_device)
 
     with torch.no_grad():
         outputs = model(
