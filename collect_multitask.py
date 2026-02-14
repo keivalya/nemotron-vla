@@ -7,6 +7,8 @@ built-in expert policies. Each task gets a natural language instruction.
 
 import os
 import numpy as np
+from data_collection import collect_task_demonstrations
+from dataset_schema import build_transition_payload, unpack_transition_payload
 
 # ── Natural language instructions for MetaWorld tasks ──
 # Maps env_name → human instruction string
@@ -97,10 +99,6 @@ def collect_multitask_demonstrations(
     Returns:
         summary: dict with per-task stats
     """
-    import gymnasium as gym
-    import metaworld  # noqa: F401
-    from metaworld.policies import ENV_POLICY_MAP
-
     os.makedirs(output_dir, exist_ok=True)
 
     if task_list is None:
@@ -127,66 +125,42 @@ def collect_multitask_demonstrations(
             continue
 
         try:
-            env = gym.make(
-                "Meta-World/MT1",
+            data = collect_task_demonstrations(
                 env_name=env_name,
-                seed=seed,
-                render_mode="rgb_array",
                 camera_name=camera_name,
+                seed=seed,
+                num_episodes=episodes_per_task,
+                max_steps=max_steps,
+                instruction=instruction,
+                verbose=False,
             )
         except Exception as e:
-            print(f"  ❌ Failed to create env: {e}")
+            print(f"  ❌ Failed to collect task: {e}")
             summary[env_name] = {"error": str(e)}
             continue
 
-        policy = ENV_POLICY_MAP[env_name]()
-
-        all_images, all_states, all_actions = [], [], []
-        successes = 0
-
-        for ep in range(episodes_per_task):
-            obs, info = env.reset()
-            done = False
-            steps = 0
-
-            while not done and steps < max_steps:
-                action = policy.get_action(obs)
-                img = env.render()
-                img = np.flipud(img).copy()  # fix OpenGL orientation
-
-                all_images.append(img.astype(np.uint8))
-                all_states.append(np.asarray(obs, dtype=np.float32).ravel().copy())
-                all_actions.append(np.asarray(action, dtype=np.float32).copy())
-
-                obs, reward, truncate, terminate, info = env.step(action)
-                done = bool(truncate or terminate) or (int(info.get("success", 0)) == 1)
-                steps += 1
-
-            if int(info.get("success", 0)) == 1:
-                successes += 1
-
-        env.close()
-
-        images = np.stack(all_images, axis=0)
-        states = np.stack(all_states, axis=0)
-        actions = np.stack(all_actions, axis=0)
-
         np.savez_compressed(
             save_path,
-            images=images,
-            states=states,
-            actions=actions,
-            instruction=instruction,
-            env_name=env_name,
+            **build_transition_payload(
+                images=data["images"],
+                states=data["states"],
+                actions=data["actions"],
+                instructions=data["instructions"],
+                env_names=data["env_names"],
+                source="metaworld_expert_multitask",
+            ),
         )
 
-        success_rate = successes / episodes_per_task * 100
-        print(f"  ✅ {len(images)} transitions, {successes}/{episodes_per_task} success ({success_rate:.0f}%)")
+        success_rate = data["successes"] / episodes_per_task * 100
+        print(
+            f"  ✅ {data['transitions']} transitions, "
+            f"{data['successes']}/{episodes_per_task} success ({success_rate:.0f}%)"
+        )
         print(f"  💾 Saved to {save_path}")
 
         summary[env_name] = {
-            "transitions": len(images),
-            "successes": successes,
+            "transitions": data["transitions"],
+            "successes": data["successes"],
             "success_rate": success_rate,
             "instruction": instruction,
         }
@@ -227,33 +201,37 @@ def merge_multitask_datasets(data_dir="data/multitask", output_path="data/multit
     files = sorted(glob.glob(os.path.join(data_dir, "*.npz")))
     print(f"Merging {len(files)} task datasets...")
 
-    all_images, all_states, all_actions, all_instructions = [], [], [], []
+    all_images, all_states, all_actions = [], [], []
+    all_instructions, all_env_names = [], []
 
     for f in files:
-        data = np.load(f, allow_pickle=True)
+        raw = np.load(f, allow_pickle=True)
+        env_name_fallback = os.path.basename(f).replace(".npz", "")
+        data = unpack_transition_payload(raw, default_env_name=env_name_fallback)
         n = len(data["states"])
-        instruction = str(data["instruction"])
-        env_name = str(data.get("env_name", os.path.basename(f).replace(".npz", "")))
+        instruction = str(data["instructions"][0]) if n > 0 else ""
+        env_name = str(data["env_names"][0]) if n > 0 else env_name_fallback
 
         all_images.append(data["images"])
         all_states.append(data["states"])
         all_actions.append(data["actions"])
-        all_instructions.extend([instruction] * n)
+        all_instructions.extend(data["instructions"].tolist())
+        all_env_names.extend(data["env_names"].tolist())
 
         print(f"  {env_name}: {n} transitions — \"{instruction}\"")
 
     images = np.concatenate(all_images, axis=0)
     states = np.concatenate(all_states, axis=0)
     actions = np.concatenate(all_actions, axis=0)
-    instructions = np.array(all_instructions, dtype=object)
-
-    np.savez_compressed(
-        output_path,
+    payload = build_transition_payload(
         images=images,
         states=states,
         actions=actions,
-        instructions=instructions,  # note: plural, per-transition
+        instructions=np.array(all_instructions, dtype=object),
+        env_names=np.array(all_env_names, dtype=object),
+        source="metaworld_expert_multitask_merged",
     )
+    np.savez_compressed(output_path, **payload)
 
     print(f"\n💾 Merged dataset saved to {output_path}")
     print(f"   Total transitions: {len(images)}")
@@ -264,6 +242,8 @@ def merge_multitask_datasets(data_dir="data/multitask", output_path="data/multit
         "total_transitions": len(images),
         "num_tasks": len(files),
         "output_path": output_path,
+        "schema_version": payload["schema_version"],
+        "dataset_format": payload["dataset_format"],
     }
 
 

@@ -24,13 +24,11 @@ Nemotron-VLA is a fully-functional Vision-Language-Action model that uses NVIDIA
          │                       │                     │
     Vision Proj            Text Proj           State Encoder
          │                       │                     │
-         └───────────┬───────────┘─────────────────────┘
-                     │
-            Cross-Attention Fusion
-                     │
-           Diffusion Policy Head (DDPM)
-                     │
-                Robot Actions
+         └──────────────Cross-Attention Fusion─────────┘
+                                 │
+                       Diffusion Policy Head (DDPM)
+                                 │
+                            Robot Actions
 ```
 
 ### Models Used
@@ -58,25 +56,17 @@ The notebook will:
 - Train the VLA
 - Evaluate and save videos
 
-### Option 2: Local Setup
+### Installation Guide
 
-```bash
-# Clone and setup
-git clone <repo-url>
-cd nemotron-vla
-
-# Install dependencies
-pip install torch torchvision transformers accelerate
-pip install gymnasium metaworld mujoco
-pip install causal-conv1d mamba-ssm
-pip install imageio[ffmpeg] matplotlib
-```
+Setup instructions are documented in `installation.md` (Colab, local, and HPC flows).
+Follow that guide before running notebooks or scripts.
 
 ## Project Structure
 
 ```
 nemotron-vla/
 ├── nemotron_vla.ipynb    # Main Colab notebook (run this!)
+├── installation.md       # Installation and environment setup guide
 ├── env.py                # MetaWorld environment wrapper
 ├── models.py             # All model components
 │   ├── RADIO loading     #   NVIDIA RADIO vision encoder

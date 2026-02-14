@@ -58,6 +58,7 @@ def _setup_rendering():
 _setup_rendering()
 
 import numpy as np
+from data_collection import collect_task_demonstrations
 
 
 class MetaWorldMT1Wrapper:
@@ -145,53 +146,31 @@ def collect_demonstrations(
     Collect expert demonstrations using MetaWorld's built-in policies.
 
     Returns:
-        dict with keys: images, states, actions, instruction
+        dict with transition arrays + schema metadata.
+        Legacy keys (`instruction`, `env_name`) are preserved for compatibility.
     """
-    from metaworld.policies import ENV_POLICY_MAP
-    import gymnasium as gym
-    import metaworld  # noqa: F401
-
-    env = gym.make(
-        "Meta-World/MT1",
+    collected = collect_task_demonstrations(
         env_name=env_name,
-        seed=seed,
-        render_mode="rgb_array",
         camera_name=camera_name,
+        seed=seed,
+        num_episodes=num_episodes,
+        max_steps=max_steps,
+        instruction=instruction,
+        verbose=True,
     )
 
-    obs, info = env.reset(seed=seed)
-    policy = ENV_POLICY_MAP[env_name]()
-
-    all_images, all_states, all_actions = [], [], []
-
-    for ep in range(num_episodes):
-        obs, info = env.reset()
-        done = False
-        steps = 0
-
-        while not done and steps < max_steps:
-            action = policy.get_action(obs)
-            img = env.render()
-            img = np.flipud(img).copy()
-
-            all_images.append(img.astype(np.uint8).copy())
-            all_states.append(np.asarray(obs, dtype=np.float32).ravel().copy())
-            all_actions.append(np.asarray(action, dtype=np.float32).copy())
-
-            obs, reward, truncate, terminate, info = env.step(action)
-            done = bool(truncate or terminate) or (int(info.get("success", 0)) == 1)
-            steps += 1
-
-        success = int(info.get("success", 0))
-        print(f"  Episode {ep+1}/{num_episodes}: {steps} steps, success={success}")
-
-    env.close()
-
     data = {
-        "images": np.stack(all_images, axis=0),      # (N, H, W, 3)
-        "states": np.stack(all_states, axis=0),       # (N, state_dim)
-        "actions": np.stack(all_actions, axis=0),     # (N, action_dim)
-        "instruction": instruction,
+        "images": collected["images"],       # (N, H, W, 3)
+        "states": collected["states"],       # (N, state_dim)
+        "actions": collected["actions"],     # (N, action_dim)
+        "instructions": collected["instructions"],  # per-transition instruction text
+        "env_names": collected["env_names"],        # per-transition env names
+        "schema_version": collected["schema_version"],
+        "dataset_format": collected["dataset_format"],
+        "source": collected["source"],
+        "num_transitions": collected["num_transitions"],
+        "instruction": collected["instruction"],
+        "env_name": collected["env_name"],
     }
 
     print(f"\n✅ Collected {data['images'].shape[0]} transitions")

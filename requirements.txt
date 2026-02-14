@@ -1,0 +1,23 @@
+# Core
+numpy
+torch
+torchvision
+
+# Foundation model loading/inference
+transformers
+accelerate
+causal-conv1d
+mamba-ssm
+
+# RL environment stack
+gymnasium
+metaworld
+mujoco
+PyOpenGL
+
+# Visualization and media
+matplotlib
+imageio[ffmpeg]
+
+# Notebook convenience
+jupyter

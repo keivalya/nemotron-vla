@@ -14,6 +14,53 @@ from torch.utils.data import Dataset, DataLoader
 # ║  1. DATASET                                                      ║
 # ╚══════════════════════════════════════════════════════════════════╝
 
+class ArrayVLADataset(Dataset):
+    """
+    Dataset backed by in-memory numpy arrays.
+
+    This keeps the minimal notebook API simple while sharing the same
+    data access behavior as file-based datasets.
+    """
+
+    def __init__(self, radio_features, nemotron_embeddings, states, actions):
+        self.vision_features = np.asarray(radio_features, dtype=np.float32)
+        self.text_embeddings = np.asarray(nemotron_embeddings, dtype=np.float32)
+        self.states = np.asarray(states, dtype=np.float32)
+        self.actions = np.asarray(actions, dtype=np.float32)
+
+        if self.text_embeddings.ndim == 1:
+            # Single instruction embedding shared by all samples.
+            self._shared_text = True
+        elif self.text_embeddings.ndim == 2:
+            if len(self.text_embeddings) != len(self.states):
+                raise ValueError(
+                    f"Mismatch: {len(self.states)} states vs {len(self.text_embeddings)} text embeddings"
+                )
+            self._shared_text = False
+        else:
+            raise ValueError("nemotron_embeddings must be rank-1 or rank-2")
+
+        if len(self.states) != len(self.vision_features):
+            raise ValueError(
+                f"Mismatch: {len(self.states)} states vs {len(self.vision_features)} vision features"
+            )
+        if len(self.states) != len(self.actions):
+            raise ValueError(
+                f"Mismatch: {len(self.states)} states vs {len(self.actions)} actions"
+            )
+
+    def __len__(self):
+        return len(self.states)
+
+    def __getitem__(self, idx):
+        vis = torch.from_numpy(self.vision_features[idx])
+        txt_np = self.text_embeddings if self._shared_text else self.text_embeddings[idx]
+        txt = torch.from_numpy(np.asarray(txt_np, dtype=np.float32).copy())
+        state = torch.from_numpy(self.states[idx])
+        action = torch.from_numpy(self.actions[idx])
+        return vis, txt, state, action
+
+
 class NemotronVLADataset(Dataset):
     """
     Dataset for training Nemotron-VLA with precomputed embeddings.
@@ -30,32 +77,32 @@ class NemotronVLADataset(Dataset):
         """
         # Load raw demonstration data
         raw = np.load(data_path, allow_pickle=True)
-        self.states = raw["states"].astype(np.float32)    # (N, state_dim)
-        self.actions = raw["actions"].astype(np.float32)   # (N, action_dim)
+        states = raw["states"].astype(np.float32)    # (N, state_dim)
+        actions = raw["actions"].astype(np.float32)   # (N, action_dim)
 
         # Load precomputed embeddings
         emb = np.load(embeddings_path, allow_pickle=True)
-        self.vision_features = emb["radio_features"].astype(np.float32)  # (N, radio_dim)
-        self.text_embedding = emb["nemotron_embedding"].astype(np.float32)  # (nemotron_dim,)
+        vision_features = emb["radio_features"].astype(np.float32)  # (N, radio_dim)
+        text_embedding = emb["nemotron_embedding"].astype(np.float32)  # (nemotron_dim,)
 
-        assert len(self.states) == len(self.vision_features), \
-            f"Mismatch: {len(self.states)} states vs {len(self.vision_features)} vision features"
+        self._dataset = ArrayVLADataset(
+            radio_features=vision_features,
+            nemotron_embeddings=text_embedding,
+            states=states,
+            actions=actions,
+        )
 
         print(f"📦 Dataset loaded: {len(self)} samples")
-        print(f"   vision features: {self.vision_features.shape}")
-        print(f"   text embedding:  {self.text_embedding.shape}")
-        print(f"   states:          {self.states.shape}")
-        print(f"   actions:         {self.actions.shape}")
+        print(f"   vision features: {vision_features.shape}")
+        print(f"   text embedding:  {text_embedding.shape}")
+        print(f"   states:          {states.shape}")
+        print(f"   actions:         {actions.shape}")
 
     def __len__(self):
-        return len(self.states)
+        return len(self._dataset)
 
     def __getitem__(self, idx):
-        vis = torch.from_numpy(self.vision_features[idx])
-        txt = torch.from_numpy(self.text_embedding.copy())  # same for all samples
-        state = torch.from_numpy(self.states[idx])
-        action = torch.from_numpy(self.actions[idx])
-        return vis, txt, state, action
+        return self._dataset[idx]
 
 
 # ╔══════════════════════════════════════════════════════════════════╗
