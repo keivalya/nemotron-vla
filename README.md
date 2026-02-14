@@ -6,7 +6,7 @@
 
 *NVIDIA RADIO · NVIDIA Nemotron Nano 9B v2 · Diffusion Policy*
 
-Coming soon: [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](#)
+<!-- Coming soon: [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](#) -->
 
 <img src="assets/demo.gif" width="50%">
 
