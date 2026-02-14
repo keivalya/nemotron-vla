@@ -8,6 +8,8 @@
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](#)
 
+<video src="assets/Nemotron 9b_small.mp4" width="50%" controls autoplay loop muted></video>
+
 </div>
 
 ---
