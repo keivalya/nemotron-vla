@@ -20,20 +20,36 @@ Nemotron-VLA is a fully-functional Vision-Language-Action model that uses NVIDIA
 
 ### Architecture
 
-```
-  NVIDIA RADIO (ViT)     Nemotron Nano 9B v2     Robot State
-  [frozen, 0.4-0.7B]     [frozen, 9B]            [raw obs]
-         │                       │                     │
-    Vision Proj            Text Proj           State Encoder
-         │                       │                     │
-         └───────────┬───────────┘─────────────────────┘
-                     │
-            Cross-Attention Fusion
-                     │
-           Diffusion Policy Head (DDPM)
-                     │
-                Robot Actions
-```
+       [Camera Image]               [Text Instruction]              [Robot State]
+             │                              │                             │
+             ▼                              ▼                             ▼
+    ┌──────────────────┐           ┌──────────────────┐          ┌──────────────────┐
+    │   NVIDIA RADIO   │           │  Nemotron Nano   │          │  State Encoder   │
+    │  (Vision ViT)    │           │   (Text LLM)     │          │      (MLP)       │
+    └────────┬─────────┘           └────────┬─────────┘          └────────┬─────────┘
+             │ (Frozen)                     │ (Frozen)                    │ (Trainable)
+             │                              │                             │
+             ▼                              ▼                             ▼
+      ┌────────────┐                 ┌────────────┐                     │
+      │ Vision Proj│                 │ Text Proj  │                     │
+      └──────┬─────┘                 └──────┬─────┘                     │
+             │                              │                             │
+             └──────────────┬───────────────┘                             │
+                            │                                             │
+                            ▼                                             ▼
+                  ┌────────────────────┐                        ┌────────────┐
+                  │   Cross-Attention  │◄───────────────────────┤ LayerNorm  │
+                  │       Fusion       │                        └────────────┘
+                  └─────────┬──────────┘
+                            │ (Fused Context)
+                            ▼
+                  ┌────────────────────┐
+                  │  Diffusion Policy  │
+                  │       Head         │
+                  └─────────┬──────────┘
+                            │
+                            ▼
+                     [Robot Action]
 
 ### Models Used
 
