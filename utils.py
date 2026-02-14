@@ -137,7 +137,9 @@ def train_nemotron_vla(
     Returns:
         losses: list of average loss per epoch
     """
-    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    checkpoint_dir = os.path.dirname(save_path)
+    if checkpoint_dir:
+        os.makedirs(checkpoint_dir, exist_ok=True)
 
     model = model.to(device)
     model.train()
